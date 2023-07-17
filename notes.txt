@@ -1,0 +1,51 @@
+; Obfuscated jmp structure
+; where reg is one of: eax, ecx, edx, ebx, ebp, esi, edi
+
+; push is sometimes replaced with the following equivalent instructions
+; lea esp, [esp-4]
+; mov [esp], reg
+
+; IDA (and perhaps other disassemblers idk) confuses the first parts of the stub for constant bytes
+; This combined with the random push replacement will make the stub look different, but its infact always the same
+
+push reg
+push reg
+lea reg, [addr1]
+lea reg, [reg+const1] ; reg = [actual routine - 10h] = start of checksum data
+mov dword ptr [esp+4], reg
+lea reg, [addr2]
+lea reg, [reg+const2] ; reg =  [verifier stub]
+push reg
+mov reg, dword ptr [esp+4] ; restore original value of reg
+; now the stack looks like this
+; [esp]: [verifier stub]
+; [esp+4]: original value of reg
+; [esp+8]: [checksum data]
+ret 4
+; here we jump to verifier
+; now esp moves 8 bytes forward (4-byte ret address plus 4 from operand), so it points to the checksum data
+; after verifier finishes, it adds 0x10 to the value at [esp]
+; now esp points to the target jump address, and another ret is done to "return" to it
+
+; =======BYTE MARKERS=======
+; 
+mov reg, [esp+4]
+ret 4
+; eax - 8b 44 24 04 c2 04 00
+; ecx - 8b 4c 24 04 c2 04 00
+; edx - 8b 54 24 04 c2 04 00
+; ebx - 8b 5c 24 04 c2 04 00
+; ebp - 8b 6c 24 04 c2 04 00
+; esi - 8b 74 24 04 c2 04 00
+; edi - 8b 7c 24 04 c2 04 00
+; 
+
+; 0x11223344 is an example address
+lea reg, [0x11223344]
+; eax - 8d 05 44 33 22 11
+; ecx - 8d 0d 44 33 22 11
+; edx - 8d 15 44 33 22 11
+; ebx - 8d 1d 44 33 22 11
+; ebp - 8d 2d 44 33 22 11
+; esi - 8d 35 44 33 22 11
+; edi - 8d 3d 44 33 22 11
