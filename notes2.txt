@@ -1,0 +1,24 @@
+EnterObfuscatedMode notes
+
+Stack:
+A8 ebp
+++ AC to all below
+00 ecx
+04 edi
+08 ebx
+0C eax / old stub (120F957)
+10 esi / old stub offset (01001400)
+14 edx
+18 GetLastError()
+1C EFLAGS
+20 RetAddr
+24 OldRetAddr (_initterm)
+
+;; not fastcall calling convention!
+ecx <- [esp+1C] // Right below RetAddr
+edx <- STUB_FRAME (??)
+
+val_3 -> {???}{7 bits select offset for something}{12 bits size decrypted data}
+offset_1 -> key1
+offset_2 -> {byte1:last_bit = skip_verify_offset_1}{verify_byte}{key2 as word}
+offset_3 -> some addr?

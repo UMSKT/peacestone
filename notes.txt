@@ -1,4 +1,15 @@
-; Obfuscated jmp structure
+NOTES
+
+These are observations made while looking through WARBIRD code.
+
+Some are relevant to deobfuscation, while some are just oddities and curiosities.
+
+Hopefully, once I have a better understanding of everything, these notes will look a lot nicer!
+
+===========================================================
+
+Obfuscated jmp structure
+
 ; where reg is one of: eax, ecx, edx, ebx, ebp, esi, edi
 
 ; push is sometimes replaced with the following equivalent instructions
@@ -6,7 +17,7 @@
 ; mov [esp], reg
 
 ; IDA (and perhaps other disassemblers idk) confuses the first parts of the stub for constant bytes
-; This combined with the random push replacement will make the stub look different, but its infact always the same
+; This combined with the random instruction replacement will make the stub look different, but its infact always the same
 
 push reg
 push reg
@@ -27,18 +38,32 @@ ret 4
 ; after verifier finishes, it adds 0x10 to the value at [esp]
 ; now esp points to the target jump address, and another ret is done to "return" to it
 
+; rarely (~1% of the time), the last three instructions are replaced with:
+; xchg [esp], reg
+; ret
+; the principle of operation and results are the same, except only 2 values are placed on the stack
+
 ; =======BYTE MARKERS=======
-; 
-mov reg, [esp+4]
-ret 4
-; eax - 8b 44 24 04 c2 04 00
-; ecx - 8b 4c 24 04 c2 04 00
-; edx - 8b 54 24 04 c2 04 00
-; ebx - 8b 5c 24 04 c2 04 00
-; ebp - 8b 6c 24 04 c2 04 00
-; esi - 8b 74 24 04 c2 04 00
-; edi - 8b 7c 24 04 c2 04 00
-; 
+; Useful for finding obfuscated jumps in a disassembler
+
+lea esp, [esp - 4]
+mov [esp], reg
+; eax - 8d 64 24 fc 89 04 24
+; ecx - 8d 64 24 fc 89 0c 24
+; edx - 8d 64 24 fc 89 14 24
+; ebx - 8d 64 24 fc 89 1c 24
+; ebp - 8d 64 24 fc 89 2c 24
+; esi - 8d 64 24 fc 89 34 24
+; edi - 8d 64 24 fc 89 3c 24
+
+push reg
+; eax - 50
+; ecx - 51
+; edx - 52
+; ebx - 53
+; ebp - 55
+; esi - 56
+; edi - 57
 
 ; 0x11223344 is an example address
 lea reg, [0x11223344]
@@ -49,3 +74,96 @@ lea reg, [0x11223344]
 ; ebp - 8d 2d 44 33 22 11
 ; esi - 8d 35 44 33 22 11
 ; edi - 8d 3d 44 33 22 11
+
+mov reg, [esp+4]
+ret 4
+; eax - 8b 44 24 04 c2 04 00
+; ecx - 8b 4c 24 04 c2 04 00
+; edx - 8b 54 24 04 c2 04 00
+; ebx - 8b 5c 24 04 c2 04 00
+; ebp - 8b 6c 24 04 c2 04 00
+; esi - 8b 74 24 04 c2 04 00
+; edi - 8b 7c 24 04 c2 04 00
+
+xchg [esp], reg
+ret
+; eax - 87 04 24 c3
+; ecx - 87 0c 24 c3
+; edx - 87 14 24 c3
+; ebx - 87 1c 24 c3
+; ebp - 87 2c 24 c3
+; esi - 87 34 24 c3
+; edi - 87 3c 24 c3
+
+===========================================================
+
+Hidden functions in CRT initialization
+
+Upon launch, msvcrt will run a list of functions to initialize the C++ runtime like so:
+
+static bool __cdecl initialize_c()
+{
+	_initialize_onexit_table(&__acrt_atexit_table);
+	_initialize_onexit_table(&__acrt_at_quick_exit_table);
+
+	// Do C initialization:
+	if (_initterm_e(__xi_a, __xi_z) != 0)
+	{
+		return false;
+	}
+
+	// Do C++ initialization:
+	_initterm(__xc_a, __xc_z);
+	return true;
+}
+
+Of particular interest is the _initterm function, with the following implementation:
+
+// Calls each function in [first, last).  [first, last) must be a valid range of
+// function pointers.  Each function is called, in order.
+extern "C" void __cdecl _initterm(_PVFV* const first, _PVFV* const last)
+{
+    for (_PVFV* it = first; it != last; ++it)
+    {
+        if (*it == nullptr)
+            continue;
+
+        (**it)();
+    }
+}
+
+(Both code examples taken from UCRT 10.0.14393.0)
+
+The addresses __xc_a and __xc_z are symbols in the pdb, so we can find the list of these functions.
+
+Many are not interesting (just allocating class memory), but some odd functions are included as well (see following sections).
+
+When in doubt on where a function is being executed, consider checking at __xc_a!
+
+===========================================================
+
+Debugger detection
+
+In _initterm initialization routines, the following device names are referenced:
+
+\\.\SICE
+\\.\NTICE
+\\.\SIWVID
+
+these correspond to the SoftICE kernel-level debugger. It seems to be rather famous for software cracking.
+
+I have not looked hard into how these strings are used, but they appear to be XORed against some constant data, with the result held in an array somewhere in .data.
+
+Not like its much of a hindrance anyway, since we have x64dbg :P
+
+===========================================================
+
+EnterObfuscatedMode
+
+This function is also called from _initterm, and is always called from an obfuscated jump block.
+
+The first steps are to perform a binary search within the block of data specified by the symbol WARBIRD::g_ObfuscatedBlockData.
+
+(Fill in later)
+
+Lastly, the return is called, and the function returns to the decrypted code.
