@@ -20,5 +20,5 @@ edx <- STUB_FRAME (??)
 
 val_3 -> {???}{7 bits select offset for something}{12 bits size decrypted data}
 offset_1 -> key1
-offset_2 -> {byte1:last_bit = skip_verify_offset_1}{verify_byte}{key2 as word}
+offset_2 -> {byte1:last_bit = no_derive_key_from_mac}{verify_byte}{key2 as word}
 offset_3 -> some addr?

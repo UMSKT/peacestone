@@ -92,7 +92,7 @@ if __name__ == "__main__":
         ret = 0
         
         for i, instr in enumerate(instrs):
-            print(instr)
+            # print(instr)
             
             if instr.mnemonic == "ret" and instr.op_str == "4":
                 ret = i
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         jmp_insert_addr = 0
         
         for inst in instrs[max(0,stub_start_index-4):stub_start_index][::-1]:
-            print(inst)
+            # print(inst)
             if inst.bytes in push_instrs:
                 # ql.mem.write(inst.address, NOP * len(inst.bytes))
                 jmp_insert_addr = inst.address
@@ -165,7 +165,12 @@ if __name__ == "__main__":
         print("JUMP TARGET @ " + hex(next_addr))
         print(ql.arch.regs.esp)
         
-        f.write(f"J R4 S {hex(jmp_insert_addr)} H {hex(handler_addr)} N {hex(next_addr)}\n")
+        if handler_addr in sym_data:
+            handler_name = sym_data[handler_addr]
+        else:
+            handler_name = hex(handler_addr)
+        
+        f.write(f"J R4 S {hex(jmp_insert_addr)} H {handler_name} N {hex(next_addr)}\n")
         
         # input()
         print()
