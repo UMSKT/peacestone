@@ -41,7 +41,7 @@ ks = Ks(KS_ARCH_X86, KS_MODE_32)
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 md.detail = True
 md.skipdata = True
-ql = Qiling(["./rootfs/sppsvc.exe"], "./rootfs")
+ql = Qiling(["./rootfs/sppsvc.exe"], "./rootfs", verbose=QL_VERBOSE.OFF)
 image_start = ql.loader.images[0].base
 image_end = ql.loader.images[0].end
 image_size = image_end - image_start
@@ -79,15 +79,17 @@ if __name__ == "__main__":
     f = open("log.txt", "w")
     
     for match in re.finditer(STUB_RET4_REGEX, pe_data):
+        print(hex(match.start()))
+        
         match_addr = image_start + match.start()
-        stub_code = ql.mem.read(match_addr - 0x1000, 0x1000)
+        stub_code = ql.mem.read(match_addr - 0x50, 0x50)
         
         try:
             stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code))[0].start()
         except:
             continue
         
-        stub_start_addr = match_addr - 0x1000 + stub_start_offset
+        stub_start_addr = match_addr - 0x50 + stub_start_offset
         instrs = list(md.disasm(ql.mem.read(stub_start_addr, 0x47), stub_start_addr))
         ret = 0
         
@@ -170,7 +172,13 @@ if __name__ == "__main__":
         else:
             handler_name = hex(handler_addr)
         
-        f.write(f"J R4 S {hex(jmp_insert_addr)} H {handler_name} N {hex(next_addr)}\n")
+        if next_addr in sym_data:
+            next_name = f"{hex(next_addr)} {sym_data[next_addr]}"
+        else:
+            next_name = hex(next_addr)
+        
+        f.write(f"J R4 S {hex(jmp_insert_addr)} H {handler_name} N {next_name}\n")
         
         # input()
         print()
+        # input()
