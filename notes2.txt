@@ -15,7 +15,7 @@ A8 ebp
 24 OldRetAddr (_initterm)
 
 ;; not fastcall calling convention!
-ecx <- [esp+1C] // Right below RetAddr
+ecx/"this" <- [esp+1C] // Right below RetAddr
 edx <- STUB_FRAME (??)
 
 val_3 -> {???}{7 bits select offset for something}{12 bits size decrypted data}

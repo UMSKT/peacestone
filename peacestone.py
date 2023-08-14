@@ -76,7 +76,7 @@ if __name__ == "__main__":
     # save_patched_exe()
     
     pe_data = ql.mem.read(image_start, image_size)
-    f = open("log.txt", "w")
+    f = open("func_table.txt", "w")
     
     for match in re.finditer(STUB_RET4_REGEX, pe_data):
         print(hex(match.start()))
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         if instrs[stub_start_index].mnemonic == "mov" or instrs[stub_start_index].mnemonic == "push":
             stub_start_index += 1
         elif instrs[stub_start_index].mnemonic != "lea":
-            print("CANT DEAL WITH THIS")
+            # print("CANT DEAL WITH THIS")
             continue
         
         stub_start = instrs[stub_start_index].address
@@ -125,7 +125,7 @@ if __name__ == "__main__":
             raise Exception("CANT DEAL WITH THIS")
         
         if used_reg not in REG_NAMES:
-            print("CANT DEAL WITH THIS")
+            # print("CANT DEAL WITH THIS")
             continue
         
         used_reg_name = REG_NAMES[used_reg].lower()
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 break
         
         if jmp_insert_addr == 0:
-            print("CANT DEAL WITH THIS")
+            # print("CANT DEAL WITH THIS")
             continue
         
         print("NOPPED STARTING @ " + hex(jmp_insert_addr))
