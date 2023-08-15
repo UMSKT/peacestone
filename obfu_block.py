@@ -131,8 +131,8 @@ for target in range(num_obd):
     
     obfu_code_table[addr] = (index, val1, val2, val3, unk3)
 
-def decrypt_code(ecstart):
-    print("DECRYPTING CODE @ " + hex(ecstart))
+def decrypt_code(ecstart, start_offset=0):
+    print("DECRYPTING CODE @ " + hex(ecstart) + " OFFSET " + hex(start_offset))
     ecstart_offset = ecstart - image_start
 
     index, val1, val2, val3, unk3 = obfu_code_table[ecstart]
@@ -242,7 +242,7 @@ def decrypt_code(ecstart):
         if ((private_relocs[index] >> 30) & 3) == 2 and offset != 0:
             print(f"RELOC @ OFFSET {hex(addr - ecstart_offset)} +{hex(offset)}")
             val = array_read_int(dec_bytes, addr - ecstart_offset)
-            val = (val + offset) % (1 << 32)
+            val = (val + offset - start_offset) % (1 << 32)
             dec_bytes = array_write_int(dec_bytes, addr - ecstart_offset, val)
             print(dec_bytes)
         
@@ -250,7 +250,7 @@ def decrypt_code(ecstart):
     
     dec_bytes = bytes(dec_bytes)
 
-    for instr in md.disasm(dec_bytes, 0):
+    for instr in md.disasm(dec_bytes, start_offset):
         print(instr)
 
     return dec_bytes
@@ -287,8 +287,8 @@ def deobfu_func(ecstart):
     code_out = b""
 
     for i in range(max_index - min_index):
-        code_out += code_chunks[i]
         addr, addr0, addr1 = ctrlflow[i]
+        code_out += decrypt_code(addr, len(code_out))
         unk3 = obfu_code_table[addr][4]
         cont_mode = (unk3 >> 12) & 0x7F
 
@@ -577,7 +577,7 @@ def deobfu_func(ecstart):
             
             jmp_code = jmp_code.format(addr0=block_offset0 + sum(map(len, code_chunks[:addr0_index])) + 16 * addr0_index - len(code_out), addr1=block_offset1 + sum(map(len, code_chunks[:addr1_index])) + 16 * addr1_index - len(code_out))
             jmp_code_bin = assemble(jmp_code)
-            jmp_code_bin += b"\x90" * (16 - len(jmp_code_bin)) # dont like this but Ghidra kekw
+            jmp_code_bin += b"\x90" * (16 - len(jmp_code_bin))
             code_out += jmp_code_bin
 
     for instr in md.disasm(code_out, 0):
