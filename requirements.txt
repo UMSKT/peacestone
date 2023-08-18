@@ -1,0 +1,3 @@
+capstone
+https://github.com/qilingframework/qiling/archive/refs/heads/dev.zip
+keystone-engine
