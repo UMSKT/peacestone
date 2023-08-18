@@ -2,14 +2,15 @@ from qiling import *
 from qiling.const import *
 from capstone import *
 from keystone import *
+from subprocess import run, PIPE
 import pefile
 import json
 import re
 import os
+import sys
 import struct
 
-# Set to binary name
-BIN_NAME = "sppsvc.exe"
+BIN_NAME = sys.argv[1]
 
 # These magic regexes are derived from the byte markers in notes.txt
 PUSH_REGEX = rb"(?:\x8dd\$\xfc\x89[\x04\x0c\x14\x1c,4<]\$|[PQRSUVW]){2}\x8d[x\x05\r\x15\x1d-5=].{4}"
@@ -28,35 +29,36 @@ REG_NAMES = {
 
 INDIR_REGS = ["ECX", "EDI", "EBX", "EBP", "ESP", "EAX", "ESI", "EDX"]
 
-with open("syms.json", "r") as f:
-    sym_data = json.loads(f.read())
-
-sym_data = {int(a, 16): b for a, b in sym_data.items()}
-sym_data_inv = {b: a for a, b in sym_data.items()}
-sym_addrs = sorted(sym_data)
-
 ks = Ks(KS_ARCH_X86, KS_MODE_32)
 md = Cs(CS_ARCH_X86, CS_MODE_32)
 md.detail = True
 md.skipdata = True
-ql = Qiling(["./sppsvc.exe"], ".", verbose=QL_VERBOSE.DISABLED)
+ql = Qiling([f"./{BIN_NAME}"], ".", verbose=QL_VERBOSE.DISABLED)
 image_start = ql.loader.images[0].base
 image_end = ql.loader.images[0].end
 image_size = image_end - image_start
 pe = pefile.PE(data=ql.mem.read(image_start, image_size))
 scratch_base = ql.mem.map_anywhere(0x1000)
 
-def func_boundary(fun_name):
-    f_start = sym_data_inv[ANLZ_FUNC]
-    ind = sym_addrs.index(f_start)
-    f_end = sym_addrs[ind+1]
-    
-    return f_start, f_end
+def load_syms():
+    text = run(["llvm-pdbutil", "pretty", "-externals", BIN_NAME.replace(".dll", ".pdb").replace(".exe", ".pdb"), f"-load-address={hex(image_start)}"], stdout=PIPE).stdout.decode("utf-8")
+    symdata = re.findall(r" public \[(\w+)\] (\S+)", text, re.MULTILINE)
 
-def save_patched_exe():
-    print("Fixing up sections...")
-    with open(BIN_NAME.replace(".exe", ".stoned.exe"), "wb") as f:
-        f.write(ql.mem.read(exe_start, exe_end - exe_start))
+    addrs = []
+    unique_syms = []
+
+    for addr, sym in symdata:
+        if addr not in addrs:
+            unique_syms.append((int(addr, 16), sym))
+            addrs.append(addr)
+
+    unique_syms = dict(unique_syms)
+    
+    return unique_syms
+
+sym_data = load_syms()
+sym_data_inv = {b: a for a, b in sym_data.items()}
+sym_addrs = sorted(sym_data)
 
 def mem_read_int(addr):
     return ql.unpack(ql.mem.read(addr, 4))
@@ -611,12 +613,13 @@ def get_all_stubs():
     # "nooo write another function dont just copy paste a loop twice" :nerd:
     for match in re.finditer(STUB_RET4_REGEX, pe_data):
         match_addr = image_start + match.start()
-        # print(hex(match_addr))
+        print(hex(match_addr))
         stub_code = ql.mem.read(match_addr - 0x50, 0x50)
         
         try:
             stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code))[0].start()
         except:
+            # print("A")
             continue
         
         stub_start_addr = match_addr - 0x50 + stub_start_offset
@@ -631,6 +634,7 @@ def get_all_stubs():
                 break
         
         if ret < 8:
+            # print("B")
             continue
         
         # min 7 backwards -> first push instr, then stop
@@ -886,6 +890,7 @@ if __name__ == "__main__":
     
     # os.makedirs("bins", exist_ok=True)
     
+    #"""
     print("Finding all obfuscated jump stubs...")
     obfu_jmps, bad_stubs = get_all_stubs()
     
@@ -905,7 +910,7 @@ if __name__ == "__main__":
     print()
     print("Deobfuscating...")
     
-    pe = pefile.PE("sppsvc.exe")
+    pe = pefile.PE(BIN_NAME)
     add_pe_section(pe, ".pstone")
     
     deobf_cur = pe.sections[-1].VirtualAddress
@@ -940,6 +945,8 @@ if __name__ == "__main__":
                 ecstart_replace_code = assemble(f"jmp {image_start + deobf_offset - arg}")
                 pe.set_bytes_at_rva(arg - image_start, ecstart_replace_code)
                 
+                deobf_table[arg] = deobf_cur
+                
                 deobf_cur += len(df_code)
                 
             stub_replace_code = assemble(f"jmp {image_start + deobf_offset - start}")
@@ -947,15 +954,58 @@ if __name__ == "__main__":
         elif handler == verify_handler:
             # print("^VERIFY")
             stub_replace_code = assemble(f"jmp {arg + 0x10 - start}")
-            stub_replace_code += b"\x90" * (end - start - len(stub_replace_code))
+            stub_replace_code += b"\x90" * (end - start - len(stub_replace_code)) + b"\x90" * 16
         else:
             # print("^NEITHER")
             stub_replace_code = assemble(f"call {handler - start}")
-            stub_replace_code = b"\x90" * (end - start - len(stub_replace_code)) + stub_replace_code
+            stub_replace_code += b"\x90" * (end - start - len(stub_replace_code))
         
         pe.set_bytes_at_rva(start - image_start, stub_replace_code)
+    #"""
     
     md.detail = False
+    
+    print("Removing thunk indirection...")
+    
+    func_addrs = sym_addrs + sorted(map(lambda a: a + image_start, deobf_table.values()))
+    
+    for i, func in enumerate(func_addrs):
+        # All MSVC-compiled functions start with mov edi, edi (8B FF)
+        
+        if pe.get_data(func - image_start, 2) == b"\x8b\xff":
+            # print(hex(func))
+            
+            if i < len(func_addrs) - 1:
+                read_len = func_addrs[i+1] - func
+            else:
+                read_len = 0x10000
+            
+            for instr in md.disasm(pe.get_data(func - image_start, read_len), func):
+                # print(instr)
+                
+                if instr.mnemonic == "call":
+                    # print("CALL")
+                    try:
+                        # print("VALID")
+                        jmp_target = int(instr.op_str, 16)
+                        target_instr = next(md.disasm(ql.mem.read(jmp_target, 16), jmp_target))
+                        # print(target_instr)
+                        
+                        if target_instr.mnemonic == "jmp":
+                            # print("PATCH")
+                            true_target = int(target_instr.op_str, 16)
+                            replace_call = assemble(f"call {true_target - instr.address}")
+                            pe.set_bytes_at_rva(instr.address - image_start, replace_call)
+                    except:
+                        continue
+    
+    if BIN_NAME[-4:] == ".dll":
+        orig_main = sym_data_inv["__DllMainCRTStartup@12"]
+    else:
+        orig_main = sym_data_inv["_wmainCRTStartup"]
+    
+    print("Patching entry point...")
+    pe.OPTIONAL_HEADER.AddressOfEntryPoint = orig_main - image_start
     
     print("Done! Saving.")
     
