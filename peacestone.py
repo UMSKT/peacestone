@@ -687,7 +687,7 @@ def get_all_stubs():
         
         # print("NOPPED STARTING @ " + hex(jmp_insert_addr))
         
-        print("PASS1")
+        # print("PASS1")
         
         try:
             ql.run(begin=jmp_insert_addr, end=instrs[ret].address)
@@ -703,7 +703,7 @@ def get_all_stubs():
             bad_stubs.append(jmp_insert_addr)
             continue
         
-        print("PASS2")
+        # print("PASS2")
         
         # print("HANDLER @ " + hex(handler_addr))
         # print("JUMP TARGET @ " + hex(next_addr))
