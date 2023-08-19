@@ -613,11 +613,11 @@ def get_all_stubs():
     # "nooo write another function dont just copy paste a loop twice" :nerd:
     for match in re.finditer(STUB_RET4_REGEX, pe_data):
         match_addr = image_start + match.start()
-        print(hex(match_addr))
+        # print(hex(match_addr))
         stub_code = ql.mem.read(match_addr - 0x50, 0x50)
         
         try:
-            stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code))[0].start()
+            stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code, re.DOTALL))[0].start()
         except:
             # print("A")
             continue
@@ -648,7 +648,7 @@ def get_all_stubs():
         if instrs[stub_start_index].mnemonic == "mov" or instrs[stub_start_index].mnemonic == "push":
             stub_start_index += 1
         elif instrs[stub_start_index].mnemonic != "lea":
-            # print("CANT DEAL WITH THIS")
+            # print("C")
             continue
         
         stub_start = instrs[stub_start_index].address
@@ -656,10 +656,10 @@ def get_all_stubs():
         try:
             used_reg = list(md.disasm(instrs[stub_start_index].bytes, 0))[0].operands[0].value.reg
         except:
-            raise Exception("CANT DEAL WITH THIS")
+            raise Exception("D")
         
         if used_reg not in REG_NAMES:
-            # print("CANT DEAL WITH THIS")
+            # print("E")
             continue
         
         used_reg_name = REG_NAMES[used_reg].lower()
@@ -682,10 +682,12 @@ def get_all_stubs():
                 break
         
         if jmp_insert_addr == 0:
-            # print("CANT DEAL WITH THIS")
+            # print("F")
             continue
         
         # print("NOPPED STARTING @ " + hex(jmp_insert_addr))
+        
+        print("PASS1")
         
         try:
             ql.run(begin=jmp_insert_addr, end=instrs[ret].address)
@@ -700,6 +702,8 @@ def get_all_stubs():
         if handler_addr == 0 or next_addr == 0  or handler_addr == -1 or next_addr == -1:
             bad_stubs.append(jmp_insert_addr)
             continue
+        
+        print("PASS2")
         
         # print("HANDLER @ " + hex(handler_addr))
         # print("JUMP TARGET @ " + hex(next_addr))
@@ -730,7 +734,7 @@ def get_all_stubs():
         stub_code = ql.mem.read(match_addr - 0x30, 0x30)
         
         try:
-            stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code))[0].start()
+            stub_start_offset = list(re.finditer(PUSH_REGEX, stub_code, re.DOTALL))[0].start()
         except:
             # print("A")
             continue
